@@ -4,7 +4,7 @@ mod schema_node;
 mod template;
 
 pub use schema_node::{Field, OneOfVariant, SchemaNode};
-pub use template::{RequestTemplate, TemplateField, build_template};
+pub use template::{RequestTemplate, TemplateField, TemplateResponse, build_template, example_of};
 
 use serde::Serialize;
 
@@ -99,6 +99,9 @@ pub struct Endpoint {
     pub body: Option<BodySpec>,
     /// Whether the operation declares an OpenAPI security requirement.
     pub auth_required: bool,
+    /// Declared responses, in spec order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub responses: Vec<ResponseSpec>,
 }
 
 impl Endpoint {
@@ -126,6 +129,24 @@ pub struct Param {
     pub default: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+}
+
+/// One declared response: status code, description, and (when the spec
+/// provides JSON content) the normalized body schema.
+#[derive(Debug, Clone, Serialize)]
+pub struct ResponseSpec {
+    /// "200", "422", "default", ...
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema: Option<SchemaNode>,
+}
+
+impl ResponseSpec {
+    pub fn is_success(&self) -> bool {
+        self.status.starts_with('2') || self.status == "default"
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

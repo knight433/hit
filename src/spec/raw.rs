@@ -93,6 +93,9 @@ pub struct RawOperation {
     pub security: Option<Vec<Value>>,
     #[serde(default)]
     pub deprecated: bool,
+    /// Status code -> response object (kept raw; may contain `$ref`s).
+    #[serde(default)]
+    pub responses: IndexMap<String, Value>,
 }
 
 /// A parameter object after any `$ref` indirection has been resolved.

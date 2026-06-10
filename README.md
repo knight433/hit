@@ -40,6 +40,7 @@ marked `*`, path/query/header params get their own sections, enums cycle with
 | Key | Action |
 |---|---|
 | `l` / `L` | log in / log out of the selected project (projects screen) — credentials are asked in a modal |
+| `i` | toggle endpoint docs on the form (docstring description + expected response bodies); the endpoint list always shows docs for the highlighted endpoint |
 | `enter` | edit field / toggle / expand |
 | **`Shift+X`** | cycle a field: value → `∅ null` → `— excluded` (as allowed by required/nullable) |
 | `x` | re-include an excluded/nulled field |

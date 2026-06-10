@@ -17,7 +17,7 @@ use crate::config;
 use crate::http::{RequestArgs, RequestExecutor};
 use crate::model::Endpoint;
 use crate::tui::form::{FormState, RowKind, RowState};
-use crate::tui::{AppCtx, AppMsg, SpecBundle, theme};
+use crate::tui::{AppCtx, AppMsg, SpecBundle, theme, widgets};
 
 pub struct RequestForm {
     bundle: Arc<SpecBundle>,
@@ -26,6 +26,8 @@ pub struct RequestForm {
     /// Inline editor state: (row, text). Some = editing.
     editor: Option<(usize, String)>,
     scroll: usize,
+    /// `i` toggles the endpoint docs pane (description + expected response).
+    show_docs: bool,
 }
 
 impl RequestForm {
@@ -37,6 +39,7 @@ impl RequestForm {
             form,
             editor: None,
             scroll: 0,
+            show_docs: false,
         }
     }
 
@@ -154,6 +157,7 @@ impl Screen for RequestForm {
                 ("enter", "edit/toggle"),
                 ("X", "null/exclude"),
                 ("a/d", "array +/-"),
+                ("i", "docs"),
                 ("e", "$EDITOR"),
                 ("ctrl+s", "send"),
                 ("esc", "back"),
@@ -211,6 +215,7 @@ impl Screen for RequestForm {
                 }
             }
             KeyCode::Char('d') if has_rows => self.form.array_delete(cursor),
+            KeyCode::Char('i') => self.show_docs = !self.show_docs,
             KeyCode::Tab if has_rows => self.form.toggle(cursor),
             KeyCode::Char('e') if self.endpoint.body.is_some() => {
                 return Action::RunEditor {
@@ -237,6 +242,20 @@ impl Screen for RequestForm {
     }
 
     fn draw(&mut self, frame: &mut Frame, area: Rect, _ctx: &AppCtx) {
+        let mut area = area;
+
+        // Docs pane: endpoint description + declared/expected responses.
+        if self.show_docs {
+            let docs = widgets::endpoint_docs_lines(&self.endpoint);
+            let pane_height = (docs.len() as u16 + 2).clamp(4, area.height * 2 / 3);
+            let [rest, pane] =
+                Layout::vertical([Constraint::Min(1), Constraint::Length(pane_height)]).areas(area);
+            area = rest;
+            let mut pane_lines = vec![widgets::rule(pane.width)];
+            pane_lines.extend(docs);
+            frame.render_widget(Paragraph::new(pane_lines), pane);
+        }
+
         let [list_area, info_area] =
             Layout::vertical([Constraint::Min(1), Constraint::Length(2)]).areas(area);
 

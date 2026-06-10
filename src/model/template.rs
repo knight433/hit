@@ -34,6 +34,20 @@ pub struct RequestTemplate {
     /// Dotted body paths that accept JSON null.
     pub nullable_paths: Vec<String>,
     pub auth_required: bool,
+    /// Declared responses with example bodies, in spec order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub responses: Vec<TemplateResponse>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TemplateResponse {
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Example body generated from the response schema (placeholders for
+    /// scalars), when the spec declares JSON content.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub example: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -85,7 +99,21 @@ pub fn build_template(endpoint: &Endpoint) -> RequestTemplate {
         optional_paths,
         nullable_paths,
         auth_required: endpoint.auth_required,
+        responses: endpoint
+            .responses
+            .iter()
+            .map(|r| TemplateResponse {
+                status: r.status.clone(),
+                description: r.description.clone(),
+                example: r.schema.as_ref().map(example_of),
+            })
+            .collect(),
     }
+}
+
+/// Standalone example generator for a schema (used for response previews).
+pub fn example_of(node: &SchemaNode) -> Value {
+    example_value(node, "", &mut Vec::new(), &mut Vec::new(), 0)
 }
 
 /// Build an example value for a schema node, recording optional/nullable

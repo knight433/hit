@@ -236,6 +236,12 @@ pub fn build(document: &Value) -> Result<ApiSpec, SpecError> {
                 None => spec_level_security,
             };
 
+            let responses = op
+                .responses
+                .iter()
+                .map(|(status, response)| build_response(document, status, response))
+                .collect();
+
             endpoints.push(Endpoint {
                 id,
                 method: method.to_string(),
@@ -247,6 +253,7 @@ pub fn build(document: &Value) -> Result<ApiSpec, SpecError> {
                 params,
                 body,
                 auth_required,
+                responses,
             });
         }
     }
@@ -326,6 +333,34 @@ fn build_body(document: &Value, request_body: &Value, endpoint_id: &str) -> Opti
         schema: normalized.node,
         required,
     })
+}
+
+/// One declared response: description plus the normalized JSON schema when
+/// the response declares JSON content.
+fn build_response(document: &Value, status: &str, response: &Value) -> crate::model::ResponseSpec {
+    let (resolved, _) = resolve::deref(document, response);
+    let description = resolved
+        .get("description")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let schema = resolved
+        .get("content")
+        .and_then(Value::as_object)
+        .and_then(|content| {
+            content.get("application/json").or_else(|| {
+                content
+                    .iter()
+                    .find(|(ct, _)| ct.contains("json"))
+                    .map(|(_, v)| v)
+            })
+        })
+        .and_then(|media| media.get("schema"))
+        .map(|s| normalize::normalize(document, s).node);
+    crate::model::ResponseSpec {
+        status: status.to_string(),
+        description,
+        schema,
+    }
 }
 
 /// Tag groups: declared spec order first, then first-seen order from

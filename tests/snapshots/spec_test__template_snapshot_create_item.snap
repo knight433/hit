@@ -131,5 +131,11 @@ expression: "serde_json::to_value(&template).unwrap()"
     "variants[].size",
     "parent"
   ],
-  "auth_required": false
+  "auth_required": false,
+  "responses": [
+    {
+      "status": "201",
+      "description": "Created"
+    }
+  ]
 }

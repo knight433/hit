@@ -156,6 +156,23 @@ impl Screen for EndpointList {
             return;
         }
 
+        // Docs pane for the hovered endpoint (description + responses).
+        if let Some(&idx) = visible.get(self.selected)
+            && list_area.height > 14
+        {
+            let endpoint = &self.bundle.spec.endpoints[idx];
+            let docs = widgets::endpoint_docs_lines(endpoint);
+            let pane_height = (docs.len() as u16 + 2).clamp(4, list_area.height / 2);
+            let [rest, pane] =
+                Layout::vertical([Constraint::Min(1), Constraint::Length(pane_height)])
+                    .areas(list_area);
+            list_area = rest;
+
+            let mut pane_lines = vec![widgets::rule(pane.width)];
+            pane_lines.extend(docs);
+            frame.render_widget(Paragraph::new(pane_lines), pane);
+        }
+
         let items: Vec<ListItem> = visible
             .iter()
             .map(|&idx| {

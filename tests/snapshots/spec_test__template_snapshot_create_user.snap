@@ -133,5 +133,32 @@ expression: "serde_json::to_value(&template).unwrap()"
     "age",
     "address"
   ],
-  "auth_required": true
+  "auth_required": true,
+  "responses": [
+    {
+      "status": "201",
+      "description": "User created",
+      "example": {
+        "id": "<string:uuid>",
+        "email": "<string:email>",
+        "name": "<string>",
+        "role": "admin"
+      }
+    },
+    {
+      "status": "422",
+      "description": "Validation Error",
+      "example": {
+        "detail": [
+          {
+            "loc": [
+              "<string>"
+            ],
+            "msg": "<string>",
+            "type": "<string>"
+          }
+        ]
+      }
+    }
+  ]
 }

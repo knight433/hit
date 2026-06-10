@@ -167,3 +167,37 @@ fn response_view_renders_422_detail() {
     assert!(rendered.contains("422"));
     assert!(rendered.contains("body.email: field required"));
 }
+
+#[test]
+fn endpoint_list_shows_docs_for_hovered_endpoint() {
+    let ctx = &mut test_ctx();
+    let mut screen = EndpointList::new(fixture_bundle(), Some("users".into()));
+    // Move to POST /users/ (second row) and render.
+    screen.handle_key(key(KeyCode::Down), ctx);
+    let rendered = draw(&mut screen, ctx);
+    assert!(rendered.contains("Create a new user account."));
+    assert!(rendered.contains("201"));
+    assert!(rendered.contains("User created"));
+    assert!(rendered.contains("<string:uuid>")); // example 201 body
+}
+
+#[test]
+fn form_docs_toggle_shows_description_and_response() {
+    let ctx = &mut test_ctx();
+    let bundle = fixture_bundle();
+    let endpoint = bundle
+        .spec
+        .find_endpoint("create_user_users__post")
+        .unwrap()
+        .clone();
+    let mut screen = RequestForm::new(bundle, endpoint);
+
+    let rendered = draw(&mut screen, ctx);
+    assert!(!rendered.contains("example 201 body"));
+
+    screen.handle_key(key(KeyCode::Char('i')), ctx);
+    let rendered = draw(&mut screen, ctx);
+    assert!(rendered.contains("Create a new user account."));
+    assert!(rendered.contains("example 201 body"));
+    assert!(rendered.contains("<string:email>"));
+}
