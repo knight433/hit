@@ -39,7 +39,7 @@ marked `*`, path/query/header params get their own sections, enums cycle with
 
 | Key | Action |
 |---|---|
-| `l` | log in to the selected project (projects screen) — credentials are asked in a modal |
+| `l` / `L` | log in / log out of the selected project (projects screen) — credentials are asked in a modal |
 | `enter` | edit field / toggle / expand |
 | **`Shift+X`** | cycle a field: value → `∅ null` → `— excluded` (as allowed by required/nullable) |
 | `x` | re-include an excluded/nulled field |

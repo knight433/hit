@@ -12,6 +12,30 @@ use crate::AppServices;
 use crate::auth::AuthManager;
 use crate::tui::{AppCtx, AppMsg};
 
+/// Clear the project's cached token (TUI counterpart of `hit logout`).
+fn logout(project_name: &str, ctx: &mut AppCtx) {
+    let result = (|| {
+        let project = crate::config::project(&ctx.services.config, project_name)?;
+        if project.auth.is_none() {
+            ctx.set_status(format!("'{project_name}' has no auth configured"));
+            return Ok(());
+        }
+        let store = crate::auth::new_token_store(
+            ctx.services.settings().token_store,
+            ctx.services.paths.token_dir.clone(),
+        )
+        .map_err(crate::error::HitError::from)?;
+        store
+            .clear(project_name)
+            .map_err(crate::error::HitError::from)?;
+        ctx.set_status(format!("logged out of '{project_name}'"));
+        Ok::<_, crate::error::HitError>(())
+    })();
+    if let Err(e) = result {
+        ctx.show_error(e.to_string());
+    }
+}
+
 /// Authenticate now (prompting through TUI modals as needed) and report
 /// the result on the status line.
 fn login(project_name: String, ctx: &mut AppCtx) {
@@ -82,6 +106,7 @@ impl Screen for ProjectList {
             ("↑↓", "select"),
             ("enter", "open"),
             ("l", "login"),
+            ("L", "logout"),
             ("r", "reload spec"),
             ("q", "quit"),
         ]
@@ -116,6 +141,13 @@ impl Screen for ProjectList {
             KeyCode::Char('l') => {
                 if let Some(name) = self.names.get(self.selected) {
                     login(name.clone(), ctx);
+                }
+                Action::None
+            }
+            // Shift+L (uppercase regardless of reported modifiers).
+            KeyCode::Char('L') => {
+                if let Some(name) = self.names.get(self.selected) {
+                    logout(name, ctx);
                 }
                 Action::None
             }
