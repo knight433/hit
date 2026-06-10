@@ -5,6 +5,7 @@
 
 pub mod form;
 pub mod screens;
+pub mod theme;
 pub mod widgets;
 
 use std::collections::HashMap;
@@ -59,6 +60,8 @@ pub struct AppCtx {
     pub status: Option<String>,
     /// Monotonic id matching in-flight requests to Response messages.
     pub request_seq: u64,
+    /// Animation frame counter (advanced by the tick timer).
+    pub frame: u64,
 }
 
 impl AppCtx {
@@ -202,6 +205,7 @@ async fn event_loop(
         modal: None,
         status: None,
         request_seq: 0,
+        frame: 0,
     };
 
     let mut stack: Vec<Box<dyn Screen>> =
@@ -218,6 +222,8 @@ async fn event_loop(
     }
 
     let mut events = EventStream::new();
+    let mut ticker = tokio::time::interval(std::time::Duration::from_millis(120));
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     loop {
         terminal.draw(|frame| draw(frame, &mut stack, &ctx))?;
@@ -235,6 +241,10 @@ async fn event_loop(
                 Some(msg) => handle_msg(msg, &mut stack, &mut ctx),
                 None => return Ok(()),
             },
+            _ = ticker.tick() => {
+                ctx.frame = ctx.frame.wrapping_add(1);
+                Action::None
+            }
         };
 
         let mut action = action;
@@ -430,8 +440,9 @@ fn draw(frame: &mut Frame, stack: &mut [Box<dyn Screen>], ctx: &AppCtx) {
     .areas(frame.area());
 
     let top = stack.last_mut().expect("stack is never empty");
-    widgets::draw_header(frame, header, &top.title());
-    top.draw(frame, body, ctx);
+    widgets::draw_header(frame, header, &top.title(), top.meta().as_deref());
+    let inner = widgets::content_panel(frame, body);
+    top.draw(frame, inner, ctx);
     widgets::draw_footer(frame, footer, &top.key_hints(), ctx.status.as_deref());
 
     if let Some(modal) = &ctx.modal {

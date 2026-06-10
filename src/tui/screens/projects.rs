@@ -3,14 +3,14 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{List, ListItem, ListState, Paragraph};
+use ratatui::widgets::{List, ListItem, ListState};
 
 use super::{Action, Screen, move_selection, tags::TagList};
 use crate::AppServices;
 use crate::auth::AuthManager;
-use crate::tui::{AppCtx, AppMsg};
+use crate::tui::{AppCtx, AppMsg, theme, widgets};
 
 /// Clear the project's cached token (TUI counterpart of `hit logout`).
 fn logout(project_name: &str, ctx: &mut AppCtx) {
@@ -158,16 +158,12 @@ impl Screen for ProjectList {
 
     fn draw(&mut self, frame: &mut Frame, area: Rect, ctx: &AppCtx) {
         if self.names.is_empty() {
-            let help = Paragraph::new(vec![
-                Line::raw(""),
-                Line::raw("  no projects registered."),
-                Line::raw(""),
-                Line::from(Span::styled(
-                    "  hit projects add <name> --base-url http://localhost:8000",
-                    Style::new().fg(Color::Cyan),
-                )),
-            ]);
-            frame.render_widget(help, area);
+            widgets::empty_state(
+                frame,
+                area,
+                "no projects registered yet",
+                "hit projects add <name> --base-url http://localhost:8000",
+            );
             return;
         }
 
@@ -176,30 +172,30 @@ impl Screen for ProjectList {
             .iter()
             .map(|name| {
                 let project = &ctx.services.config.projects[name];
-                let auth = project
-                    .auth
-                    .as_ref()
-                    .map_or("no auth".to_string(), |a| a.type_name().to_string());
-                let loaded = if ctx.specs.contains_key(name) {
-                    "●"
-                } else {
-                    " "
-                };
-                ListItem::new(Line::from(vec![
-                    Span::styled(format!(" {loaded} "), Style::new().fg(Color::Green)),
+                let loaded = ctx.specs.contains_key(name);
+                let auth = project.auth.as_ref().map(|a| a.type_name());
+                let mut spans = vec![
                     Span::styled(
-                        format!("{name:<24}"),
-                        Style::new().add_modifier(Modifier::BOLD),
+                        if loaded { "● " } else { "○ " },
+                        Style::new().fg(if loaded { theme::GREEN } else { theme::DIM }),
                     ),
-                    Span::raw(format!("{}  ", project.base_url)),
-                    Span::styled(format!("[{auth}]"), Style::new().fg(Color::DarkGray)),
-                ]))
+                    Span::styled(format!("{name:<24}"), theme::bold(theme::text())),
+                    Span::styled(format!("{:<36}", project.base_url), theme::soft()),
+                ];
+                match auth {
+                    Some(auth_type) => spans.push(Span::styled(
+                        format!(" {auth_type} "),
+                        Style::new().fg(theme::MAGENTA).bg(theme::SEL_BG),
+                    )),
+                    None => spans.push(Span::styled(" no auth ", theme::dim())),
+                }
+                ListItem::new(Line::from(spans))
             })
             .collect();
 
         let list = List::new(items)
-            .highlight_style(Style::new().bg(Color::Rgb(40, 40, 60)))
-            .highlight_symbol("▶");
+            .highlight_style(theme::selected_row())
+            .highlight_symbol(Span::styled("▌", theme::accent()));
         let mut state = ListState::default().with_selected(Some(self.selected));
         frame.render_stateful_widget(list, area, &mut state);
     }

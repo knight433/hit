@@ -43,6 +43,7 @@ fn test_ctx() -> AppCtx {
         modal: None,
         status: None,
         request_seq: 0,
+        frame: 0,
     }
 }
 
@@ -90,7 +91,7 @@ fn form_renders_states_and_cycles_with_keys() {
 
     let rendered = draw(&mut screen, ctx);
     assert!(rendered.contains("email"));
-    assert!(rendered.contains("— excluded")); // address / age
+    assert!(rendered.contains("⊘ excluded")); // address / age
     assert!(rendered.contains("◂ member ▸")); // enum default
 
     // Type into the first field (email) via the inline editor.

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use serde_json::Value;
@@ -17,7 +17,7 @@ use crate::config;
 use crate::http::{RequestArgs, RequestExecutor};
 use crate::model::Endpoint;
 use crate::tui::form::{FormState, RowKind, RowState};
-use crate::tui::{AppCtx, AppMsg, SpecBundle, widgets};
+use crate::tui::{AppCtx, AppMsg, SpecBundle, theme};
 
 pub struct RequestForm {
     bundle: Arc<SpecBundle>,
@@ -137,9 +137,13 @@ impl RequestForm {
 impl Screen for RequestForm {
     fn title(&self) -> String {
         format!(
-            "{} / {} {}",
+            "projects ▸ {} ▸ {} {}",
             self.bundle.project, self.endpoint.method, self.endpoint.path
         )
+    }
+
+    fn meta(&self) -> Option<String> {
+        self.endpoint.summary.clone()
     }
 
     fn key_hints(&self) -> Vec<(&'static str, &'static str)> {
@@ -251,71 +255,92 @@ impl Screen for RequestForm {
             self.scroll = cursor_pos + 1 - height;
         }
 
+        // Label column width: longest visible label (incl. indent), clamped.
+        let label_width = visible
+            .iter()
+            .map(|&i| {
+                let row = &self.form.rows[i];
+                row.depth as usize * 2 + row.label.len() + 1
+            })
+            .max()
+            .unwrap_or(16)
+            .clamp(16, 34);
+
         let lines: Vec<Line> = visible
             .iter()
             .skip(self.scroll)
             .take(height)
-            .map(|&i| self.render_row(i))
+            .map(|&i| self.render_row(i, label_width, list_area.width))
             .collect();
         frame.render_widget(Paragraph::new(lines), list_area);
 
-        // Info: cursor row description + state legend.
-        let mut info_lines = Vec::new();
+        // Info strip: cursor row name · type · flags — description.
         if let Some(row) = self.form.rows.get(self.form.cursor) {
-            let mut meta = Vec::new();
+            let mut spans = vec![
+                Span::styled(format!(" {} ", row.label), theme::bold(theme::text())),
+                Span::styled(format!("· {} ", row.kind_label), theme::dim()),
+            ];
             if row.required {
-                meta.push("required");
+                spans.push(Span::styled("· required ", Style::new().fg(theme::RED)));
             }
             if row.nullable {
-                meta.push("nullable");
+                spans.push(Span::styled("· nullable ", Style::new().fg(theme::MAGENTA)));
             }
-            let meta = if meta.is_empty() {
-                String::new()
-            } else {
-                format!(" [{}]", meta.join(", "))
-            };
-            info_lines.push(Line::from(Span::styled(
-                format!(
-                    " {} ({}){}{}",
-                    row.label,
-                    row.kind_label,
-                    meta,
-                    row.description
-                        .as_deref()
-                        .map(|d| format!(" — {d}"))
-                        .unwrap_or_default()
-                ),
-                Style::new().fg(Color::Gray),
-            )));
+            if let Some(description) = &row.description {
+                spans.push(Span::styled(format!("— {description}"), theme::soft()));
+            }
+            let rule = Line::from(Span::styled(
+                "─".repeat(info_area.width as usize),
+                Style::new().fg(theme::SEL_BG),
+            ));
+            frame.render_widget(Paragraph::new(vec![rule, Line::from(spans)]), info_area);
         }
-        frame.render_widget(Paragraph::new(info_lines), info_area);
     }
 }
 
 impl RequestForm {
-    fn render_row(&self, i: usize) -> Line<'_> {
+    fn render_row(&self, i: usize, label_width: usize, width: u16) -> Line<'_> {
         let row = &self.form.rows[i];
         let is_cursor = i == self.form.cursor;
-        let indent = "  ".repeat(row.depth as usize + 1);
 
         if row.kind == RowKind::SectionHeader {
-            return Line::from(Span::styled(
-                format!("── {} ", row.label),
-                Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-            ));
+            let label = format!("╴{}╶", row.label);
+            let fill = (width as usize).saturating_sub(label.len() + 3);
+            return Line::from(vec![
+                Span::styled("──", Style::new().fg(theme::SEL_BG)),
+                Span::styled(label, theme::bold(theme::accent())),
+                Span::styled("─".repeat(fill), Style::new().fg(theme::SEL_BG)),
+            ]);
         }
 
-        let mut spans = vec![Span::raw(if is_cursor { "▶" } else { " " })];
-        let label_style = if is_cursor {
-            Style::new().add_modifier(Modifier::BOLD).fg(Color::White)
+        let mut spans = vec![if is_cursor {
+            Span::styled("▌ ", theme::accent())
         } else {
-            Style::new()
-        };
-        let required_marker = if row.required { "*" } else { " " };
-        spans.push(Span::styled(
-            format!("{indent}{}{required_marker} ", row.label),
-            label_style,
-        ));
+            Span::raw("  ")
+        }];
+
+        // Label cell, padded to the shared column width.
+        let indent = "  ".repeat(row.depth as usize);
+        let marker = if row.required { "*" } else { " " };
+        let label_text = format!("{indent}{}{marker}", row.label);
+        let padded = format!("{label_text:<label_width$}  ");
+        let mut label_spans = vec![
+            Span::styled(
+                format!("{indent}{}", row.label),
+                if is_cursor {
+                    theme::bold(theme::text())
+                } else {
+                    theme::soft()
+                },
+            ),
+            Span::styled(
+                if row.required { "*" } else { " " },
+                Style::new().fg(theme::RED),
+            ),
+        ];
+        let pad = padded.len().saturating_sub(label_text.len());
+        label_spans.push(Span::raw(" ".repeat(pad)));
+        spans.extend(label_spans);
 
         // Inline editor takes over the value cell.
         if let Some((edit_row, text)) = &self.editor
@@ -323,45 +348,49 @@ impl RequestForm {
         {
             spans.push(Span::styled(
                 format!("{text}▏"),
-                Style::new().fg(Color::Yellow),
+                Style::new().fg(theme::YELLOW),
             ));
             return Line::from(spans);
         }
 
         let value_span = match (&row.state, &row.kind) {
             (RowState::Excluded, _) => Span::styled(
-                "— excluded",
-                widgets::dim().add_modifier(Modifier::CROSSED_OUT),
+                "⊘ excluded",
+                theme::dim().add_modifier(Modifier::CROSSED_OUT),
             ),
-            (RowState::Null, _) => Span::styled("∅ null", widgets::dim()),
-            (RowState::Empty, _) => Span::styled("<empty>", widgets::dim()),
+            (RowState::Null, _) => Span::styled(
+                "∅ null",
+                Style::new()
+                    .fg(theme::MAGENTA)
+                    .add_modifier(Modifier::ITALIC),
+            ),
+            (RowState::Empty, _) => {
+                Span::styled("‹empty›", theme::dim().add_modifier(Modifier::ITALIC))
+            }
             (RowState::Filled(_), RowKind::ObjectHeader) => Span::styled(
                 if row.collapsed {
-                    "{…} (collapsed)"
+                    "{ … } collapsed"
                 } else {
                     "{"
                 },
-                Style::new().fg(Color::Cyan),
+                Style::new().fg(theme::CYAN),
             ),
             (RowState::Filled(_), RowKind::ArrayHeader) => Span::styled(
-                format!("[{}]", self.array_len(i)),
-                Style::new().fg(Color::Cyan),
+                format!("[ {} ]", self.array_len(i)),
+                Style::new().fg(theme::CYAN),
             ),
             (RowState::Filled(v), RowKind::Enum(_)) => Span::styled(
                 format!("◂ {} ▸", value_text(v)),
-                Style::new().fg(Color::Green),
+                Style::new().fg(theme::CYAN),
             ),
             (RowState::Filled(v), RowKind::Const) => {
-                Span::styled(format!("{} (fixed)", value_text(v)), widgets::dim())
+                Span::styled(format!("{} ⚷ fixed", value_text(v)), theme::dim())
             }
-            (RowState::Filled(v), _) => Span::styled(value_text(v), Style::new().fg(Color::Green)),
+            (RowState::Filled(v), _) => Span::styled(value_text(v), value_style(v)),
         };
         spans.push(value_span);
 
-        spans.push(Span::styled(
-            format!("  {}", row.kind_label),
-            Style::new().fg(Color::DarkGray),
-        ));
+        spans.push(Span::styled(format!("  {}", row.kind_label), theme::dim()));
         Line::from(spans)
     }
 
@@ -378,5 +407,15 @@ fn value_text(value: &Value) -> String {
     match value {
         Value::String(s) => s.clone(),
         other => other.to_string(),
+    }
+}
+
+/// Color scalar values by JSON type (mirrors the response-body coloring).
+fn value_style(value: &Value) -> Style {
+    match value {
+        Value::String(_) => Style::new().fg(theme::GREEN),
+        Value::Number(_) => Style::new().fg(theme::ORANGE),
+        Value::Bool(_) | Value::Null => Style::new().fg(theme::MAGENTA),
+        _ => theme::text(),
     }
 }

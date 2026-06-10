@@ -5,12 +5,14 @@ use std::sync::Arc;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::layout::{Constraint, Layout};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
+use ratatui::widgets::Paragraph;
 use ratatui::widgets::{List, ListItem, ListState};
 
 use super::{Action, Screen, form::RequestForm, move_selection};
-use crate::tui::{AppCtx, SpecBundle, widgets};
+use crate::tui::{AppCtx, SpecBundle, theme, widgets};
 
 pub struct EndpointList {
     bundle: Arc<SpecBundle>,
@@ -63,11 +65,11 @@ impl EndpointList {
 impl Screen for EndpointList {
     fn title(&self) -> String {
         let scope = self.tag.as_deref().unwrap_or("all endpoints");
-        let mut title = format!("{} / {scope}", self.bundle.project);
-        if !self.filter.is_empty() {
-            title.push_str(&format!("  (filter: {})", self.filter));
-        }
-        title
+        format!("projects ▸ {} ▸ {scope}", self.bundle.project)
+    }
+
+    fn meta(&self) -> Option<String> {
+        Some(format!("{} endpoints", self.visible().len()))
     }
 
     fn key_hints(&self) -> Vec<(&'static str, &'static str)> {
@@ -128,39 +130,64 @@ impl Screen for EndpointList {
     }
 
     fn draw(&mut self, frame: &mut Frame, area: Rect, _ctx: &AppCtx) {
+        let mut list_area = area;
+
+        // Search bar (visible while typing or when a filter is applied).
+        if self.filtering || !self.filter.is_empty() {
+            let [search, rest] =
+                Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(area);
+            list_area = rest;
+            let mut spans = vec![
+                Span::styled(" / ", Style::new().fg(theme::CYAN).bg(theme::SEL_BG)),
+                Span::raw(" "),
+                Span::styled(self.filter.clone(), Style::new().fg(theme::YELLOW)),
+            ];
+            if self.filtering {
+                spans.push(Span::styled("▏", Style::new().fg(theme::YELLOW)));
+            } else {
+                spans.push(Span::styled("  (esc on / clears)", theme::dim()));
+            }
+            frame.render_widget(Paragraph::new(Line::from(spans)), search);
+        }
+
         let visible = self.visible();
+        if visible.is_empty() {
+            widgets::empty_state(frame, list_area, "no endpoints match", "press / to refine");
+            return;
+        }
+
         let items: Vec<ListItem> = visible
             .iter()
             .map(|&idx| {
                 let e = &self.bundle.spec.endpoints[idx];
                 let mut spans = vec![
-                    Span::styled(
-                        format!(" {:<7}", e.method),
-                        widgets::method_style(&e.method),
-                    ),
-                    Span::styled(
-                        format!("{:<36}", e.path),
-                        Style::new().add_modifier(Modifier::BOLD),
-                    ),
+                    theme::method_badge(&e.method),
+                    Span::raw(" "),
+                    Span::styled(format!("{:<36}", e.path), theme::bold(theme::text())),
                     Span::styled(
                         e.summary.clone().unwrap_or_else(|| e.id.clone()),
-                        Style::new().fg(Color::DarkGray),
+                        theme::dim(),
                     ),
                 ];
                 if e.auth_required {
-                    spans.push(Span::styled("  🔒", Style::new()));
+                    spans.push(Span::styled("  ⚿", Style::new().fg(theme::YELLOW)));
                 }
                 if e.deprecated {
-                    spans.push(Span::styled("  [deprecated]", Style::new().fg(Color::Red)));
+                    spans.push(Span::styled(
+                        "  deprecated",
+                        Style::new()
+                            .fg(theme::RED)
+                            .add_modifier(Modifier::CROSSED_OUT),
+                    ));
                 }
                 ListItem::new(Line::from(spans))
             })
             .collect();
 
         let list = List::new(items)
-            .highlight_style(Style::new().bg(Color::Rgb(40, 40, 60)))
-            .highlight_symbol("▶");
+            .highlight_style(theme::selected_row())
+            .highlight_symbol(Span::styled("▌", theme::accent()));
         let mut state = ListState::default().with_selected(Some(self.selected));
-        frame.render_stateful_widget(list, area, &mut state);
+        frame.render_stateful_widget(list, list_area, &mut state);
     }
 }

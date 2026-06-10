@@ -26,7 +26,12 @@ pub enum Action {
 }
 
 pub trait Screen {
+    /// Breadcrumb segments separated by " ▸ " (rendered in the header).
     fn title(&self) -> String;
+    /// Right-aligned header info (e.g. spec title/version/origin).
+    fn meta(&self) -> Option<String> {
+        None
+    }
     /// Footer key hints, e.g. [("enter", "open"), ("q", "quit")].
     fn key_hints(&self) -> Vec<(&'static str, &'static str)>;
     fn handle_key(&mut self, key: KeyEvent, ctx: &mut AppCtx) -> Action;

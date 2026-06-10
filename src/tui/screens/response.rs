@@ -6,14 +6,14 @@ use std::sync::Arc;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use super::{Action, Screen};
 use crate::http::ApiResponse;
 use crate::spec::adapter::adapter_for;
-use crate::tui::{AppCtx, AppMsg, SpecBundle, widgets};
+use crate::tui::{AppCtx, AppMsg, SpecBundle, theme, widgets};
 
 enum State {
     Loading,
@@ -47,7 +47,10 @@ impl ResponseView {
 
 impl Screen for ResponseView {
     fn title(&self) -> String {
-        format!("{} / {} {}", self.bundle.project, self.method, self.path)
+        format!(
+            "projects ▸ {} ▸ {} {} ▸ response",
+            self.bundle.project, self.method, self.path
+        )
     }
 
     fn key_hints(&self) -> Vec<(&'static str, &'static str)> {
@@ -107,14 +110,15 @@ impl Screen for ResponseView {
 
     fn draw(&mut self, frame: &mut Frame, area: Rect, ctx: &AppCtx) {
         let lines = match &self.state {
-            State::Loading => vec![widgets::loading_line("response")],
+            State::Loading => vec![Line::raw(""), widgets::loading_line("response", ctx.frame)],
             State::Failed(message) => vec![
+                Line::raw(""),
                 Line::from(Span::styled(
-                    " request failed",
-                    Style::new().fg(Color::Red).add_modifier(Modifier::BOLD),
+                    " ✗ request failed",
+                    Style::new().fg(theme::RED).add_modifier(Modifier::BOLD),
                 )),
                 Line::raw(""),
-                Line::from(Span::raw(format!(" {message}"))),
+                Line::from(Span::styled(format!("   {message}"), theme::soft())),
             ],
             State::Done(response) => self.render_response(response, ctx),
         };
@@ -127,15 +131,11 @@ impl ResponseView {
     fn render_response(&self, response: &ApiResponse, ctx: &AppCtx) -> Vec<Line<'static>> {
         let mut lines = Vec::new();
         lines.push(Line::from(vec![
-            Span::styled(
-                format!(" {} ", response.status),
-                widgets::status_style(response.status),
-            ),
-            Span::raw(format!(" {} {}  ", response.method, response.url)),
-            Span::styled(
-                format!("{} ms", response.latency_ms),
-                Style::new().fg(Color::Cyan),
-            ),
+            theme::status_badge(response.status),
+            Span::raw(" "),
+            theme::method_badge(&response.method),
+            Span::styled(format!(" {}", response.url), theme::bold(theme::text())),
+            Span::styled(format!("  ⏱ {} ms", response.latency_ms), theme::dim()),
         ]));
 
         // Framework-aware error rendering (FastAPI 422 detail).
@@ -146,19 +146,21 @@ impl ResponseView {
         {
             lines.push(Line::raw(""));
             for error_line in error_lines {
-                lines.push(Line::from(Span::styled(
-                    format!("  ! {error_line}"),
-                    Style::new().fg(Color::Yellow),
-                )));
+                lines.push(Line::from(vec![
+                    Span::styled("  ✗ ", Style::new().fg(theme::RED)),
+                    Span::styled(error_line, Style::new().fg(theme::YELLOW)),
+                ]));
             }
         }
 
         if self.show_headers {
             lines.push(Line::raw(""));
+            lines.push(Line::from(Span::styled("  ── headers ──", theme::dim())));
             for (name, value) in &response.headers {
                 lines.push(Line::from(vec![
-                    Span::styled(format!("  {name}: "), Style::new().fg(Color::Cyan)),
-                    Span::raw(value.clone()),
+                    Span::styled(format!("  {name}"), Style::new().fg(theme::CYAN)),
+                    Span::styled(": ", theme::dim()),
+                    Span::styled(value.clone(), theme::soft()),
                 ]));
             }
         }
@@ -170,22 +172,15 @@ impl ResponseView {
             response.body.as_str().unwrap_or("").to_string()
         };
         for raw_line in body_text.lines() {
-            lines.push(render_json_line(raw_line));
+            if response.body_is_json {
+                lines.push(widgets::colorize_json_line(raw_line));
+            } else {
+                lines.push(Line::from(Span::styled(
+                    raw_line.to_string(),
+                    theme::soft(),
+                )));
+            }
         }
         lines
     }
-}
-
-/// Cheap depth-tinted JSON rendering: keys cyan, scalars by type.
-fn render_json_line(line: &str) -> Line<'static> {
-    if let Some((key_part, rest)) = line.split_once(':')
-        && key_part.trim_start().starts_with('"')
-    {
-        return Line::from(vec![
-            Span::styled(key_part.to_string(), Style::new().fg(Color::Cyan)),
-            Span::raw(":"),
-            Span::raw(rest.to_string()),
-        ]);
-    }
-    Line::raw(line.to_string())
 }

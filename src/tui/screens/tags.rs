@@ -5,12 +5,12 @@ use std::sync::Arc;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{List, ListItem, ListState};
 
 use super::{Action, Screen, endpoints::EndpointList, move_selection};
-use crate::tui::{AppCtx, AppMsg, SpecBundle, widgets};
+use crate::tui::{AppCtx, AppMsg, SpecBundle, theme, widgets};
 
 pub struct TagList {
     project: String,
@@ -30,13 +30,18 @@ impl TagList {
 
 impl Screen for TagList {
     fn title(&self) -> String {
-        match &self.bundle {
-            Some(bundle) => format!(
-                "{} — {} v{} ({:?})",
-                self.project, bundle.spec.title, bundle.spec.version, bundle.origin
-            ),
-            None => format!("{} — loading…", self.project),
-        }
+        format!("projects ▸ {}", self.project)
+    }
+
+    fn meta(&self) -> Option<String> {
+        self.bundle.as_ref().map(|bundle| {
+            format!(
+                "{} v{} · {}",
+                bundle.spec.title,
+                bundle.spec.version,
+                origin_label(bundle.origin)
+            )
+        })
     }
 
     fn key_hints(&self) -> Vec<(&'static str, &'static str)> {
@@ -102,7 +107,7 @@ impl Screen for TagList {
         }
         let Some(bundle) = &self.bundle else {
             frame.render_widget(
-                ratatui::widgets::Paragraph::new(widgets::loading_line("openapi.json")),
+                ratatui::widgets::Paragraph::new(widgets::loading_line("openapi.json", ctx.frame)),
                 area,
             );
             return;
@@ -114,26 +119,31 @@ impl Screen for TagList {
             .iter()
             .map(|tag| {
                 ListItem::new(Line::from(vec![
+                    Span::styled("◆ ", theme::accent()),
+                    Span::styled(format!("{:<24}", tag.name), theme::bold(theme::text())),
                     Span::styled(
-                        format!(" {:<24}", tag.name),
-                        Style::new().add_modifier(Modifier::BOLD),
+                        format!("{:>3} ", tag.endpoint_ids.len()),
+                        Style::new().fg(theme::CYAN),
                     ),
-                    Span::styled(
-                        format!("{:>3} endpoints  ", tag.endpoint_ids.len()),
-                        Style::new().fg(Color::Cyan),
-                    ),
-                    Span::styled(
-                        tag.description.clone().unwrap_or_default(),
-                        Style::new().fg(Color::DarkGray),
-                    ),
+                    Span::styled("endpoints   ", theme::dim()),
+                    Span::styled(tag.description.clone().unwrap_or_default(), theme::dim()),
                 ]))
             })
             .collect();
 
         let list = List::new(items)
-            .highlight_style(Style::new().bg(Color::Rgb(40, 40, 60)))
-            .highlight_symbol("▶");
+            .highlight_style(theme::selected_row())
+            .highlight_symbol(Span::styled("▌", theme::accent()));
         let mut state = ListState::default().with_selected(Some(self.selected));
         frame.render_stateful_widget(list, area, &mut state);
+    }
+}
+
+fn origin_label(origin: crate::spec::SpecOrigin) -> &'static str {
+    match origin {
+        crate::spec::SpecOrigin::Live => "live",
+        crate::spec::SpecOrigin::Cache => "cached",
+        crate::spec::SpecOrigin::StaleCache => "stale cache",
+        crate::spec::SpecOrigin::File => "spec file",
     }
 }
