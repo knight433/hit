@@ -1,0 +1,269 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Demo Shop API", "version": "1.4.0" },
+  "tags": [
+    { "name": "users", "description": "User management" },
+    { "name": "items", "description": "Catalog items" },
+    { "name": "auth" }
+  ],
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Login",
+        "operationId": "login_auth_login_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": { "$ref": "#/components/schemas/Body_login_auth_login_post" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/users/": {
+      "get": {
+        "tags": ["users"],
+        "summary": "List users",
+        "operationId": "list_users_users__get",
+        "security": [{ "OAuth2PasswordBearer": [] }],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 20, "title": "Limit" }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/Role" }
+          }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      },
+      "post": {
+        "tags": ["users"],
+        "summary": "Create user",
+        "operationId": "create_user_users__post",
+        "security": [{ "OAuth2PasswordBearer": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UserCreate" }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Created" } }
+      }
+    },
+    "/users/{user_id}": {
+      "get": {
+        "tags": ["users"],
+        "summary": "Get user",
+        "operationId": "get_user_users__user_id__get",
+        "security": [{ "OAuth2PasswordBearer": [] }],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "User Id" }
+          }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      },
+      "patch": {
+        "tags": ["users"],
+        "summary": "Update user",
+        "operationId": "update_user_users__user_id__patch",
+        "security": [{ "OAuth2PasswordBearer": [] }],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UserPatch" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/items/": {
+      "post": {
+        "tags": ["items"],
+        "summary": "Create item",
+        "operationId": "create_item_items__post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ItemCreate" }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Created" } }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "operationId": "health_health_get",
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "OAuth2PasswordBearer": {
+        "type": "oauth2",
+        "flows": { "password": { "tokenUrl": "/auth/login", "scopes": {} } }
+      }
+    },
+    "schemas": {
+      "Body_login_auth_login_post": {
+        "type": "object",
+        "title": "Body_login_auth_login_post",
+        "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string", "title": "Username" },
+          "password": { "type": "string", "title": "Password" }
+        }
+      },
+      "Role": {
+        "type": "string",
+        "enum": ["admin", "member", "viewer"],
+        "title": "Role"
+      },
+      "Address": {
+        "type": "object",
+        "title": "Address",
+        "required": ["line1", "city"],
+        "properties": {
+          "line1": { "type": "string", "title": "Line1" },
+          "line2": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Line2"
+          },
+          "city": { "type": "string", "title": "City" }
+        }
+      },
+      "UserCreate": {
+        "type": "object",
+        "title": "UserCreate",
+        "required": ["email", "name", "nickname"],
+        "properties": {
+          "email": { "type": "string", "format": "email", "title": "Email" },
+          "name": { "type": "string", "title": "Name" },
+          "nickname": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Nickname",
+            "description": "Required but may be null"
+          },
+          "role": { "$ref": "#/components/schemas/Role", "default": "member" },
+          "age": {
+            "anyOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }],
+            "title": "Age",
+            "default": null
+          },
+          "address": {
+            "anyOf": [{ "$ref": "#/components/schemas/Address" }, { "type": "null" }],
+            "default": null
+          },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" },
+            "title": "Tags",
+            "default": []
+          }
+        }
+      },
+      "UserPatch": {
+        "type": "object",
+        "title": "UserPatch",
+        "properties": {
+          "name": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "default": null
+          },
+          "role": {
+            "anyOf": [{ "$ref": "#/components/schemas/Role" }, { "type": "null" }],
+            "default": null
+          }
+        }
+      },
+      "ItemCreate": {
+        "type": "object",
+        "title": "ItemCreate",
+        "required": ["sku", "price", "kind", "variants"],
+        "properties": {
+          "sku": { "type": "string", "title": "Sku" },
+          "price": { "type": "number", "minimum": 0.0, "title": "Price" },
+          "kind": { "const": "physical", "title": "Kind" },
+          "variants": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Variant" },
+            "title": "Variants"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "title": "Metadata",
+            "default": {}
+          },
+          "parent": {
+            "anyOf": [{ "$ref": "#/components/schemas/ItemCreate" }, { "type": "null" }],
+            "default": null
+          }
+        }
+      },
+      "Variant": {
+        "type": "object",
+        "title": "Variant",
+        "required": ["name", "stock"],
+        "properties": {
+          "name": { "type": "string", "title": "Name" },
+          "stock": { "type": "integer", "minimum": 0, "title": "Stock" },
+          "size": {
+            "anyOf": [
+              { "type": "string", "enum": ["S", "M", "L"] },
+              { "type": "null" }
+            ],
+            "default": null
+          }
+        }
+      },
+      "HTTPValidationError": {
+        "type": "object",
+        "title": "HTTPValidationError",
+        "properties": {
+          "detail": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ValidationError" }
+          }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "title": "ValidationError",
+        "required": ["loc", "msg", "type"],
+        "properties": {
+          "loc": { "type": "array", "items": { "type": "string" } },
+          "msg": { "type": "string" },
+          "type": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,137 @@
+---
+source: tests/spec_test.rs
+expression: "serde_json::to_value(&template).unwrap()"
+---
+{
+  "endpoint_id": "create_user_users__post",
+  "method": "POST",
+  "path": "/users/",
+  "summary": "Create user",
+  "path_params": [],
+  "query_params": [],
+  "header_params": [],
+  "body": {
+    "email": "<string:email>",
+    "name": "<string>",
+    "nickname": "<string>",
+    "role": "member",
+    "age": null,
+    "address": null,
+    "tags": []
+  },
+  "body_schema": {
+    "kind": "object",
+    "fields": [
+      {
+        "name": "email",
+        "schema": {
+          "kind": "string",
+          "format": "email"
+        },
+        "required": true,
+        "nullable": false
+      },
+      {
+        "name": "name",
+        "schema": {
+          "kind": "string"
+        },
+        "required": true,
+        "nullable": false
+      },
+      {
+        "name": "nickname",
+        "schema": {
+          "kind": "string"
+        },
+        "required": true,
+        "nullable": true,
+        "description": "Required but may be null"
+      },
+      {
+        "name": "role",
+        "schema": {
+          "kind": "string",
+          "enum_values": [
+            "admin",
+            "member",
+            "viewer"
+          ]
+        },
+        "required": false,
+        "nullable": false,
+        "default": "member"
+      },
+      {
+        "name": "age",
+        "schema": {
+          "kind": "integer",
+          "minimum": 0
+        },
+        "required": false,
+        "nullable": true,
+        "default": null
+      },
+      {
+        "name": "address",
+        "schema": {
+          "kind": "object",
+          "fields": [
+            {
+              "name": "line1",
+              "schema": {
+                "kind": "string"
+              },
+              "required": true,
+              "nullable": false
+            },
+            {
+              "name": "line2",
+              "schema": {
+                "kind": "string"
+              },
+              "required": false,
+              "nullable": true
+            },
+            {
+              "name": "city",
+              "schema": {
+                "kind": "string"
+              },
+              "required": true,
+              "nullable": false
+            }
+          ]
+        },
+        "required": false,
+        "nullable": true,
+        "default": null
+      },
+      {
+        "name": "tags",
+        "schema": {
+          "kind": "array",
+          "item": {
+            "kind": "string"
+          }
+        },
+        "required": false,
+        "nullable": false,
+        "default": []
+      }
+    ]
+  },
+  "body_content_type": "application/json",
+  "optional_paths": [
+    "role",
+    "age",
+    "address",
+    "tags"
+  ],
+  "nullable_paths": [
+    "nickname",
+    "age",
+    "address"
+  ],
+  "auth_required": true
+}

@@ -1,0 +1,44 @@
+{
+  "openapi": "3.0.2",
+  "info": { "title": "Legacy API", "version": "0.9.0" },
+  "paths": {
+    "/notes/": {
+      "post": {
+        "tags": ["notes"],
+        "summary": "Create note",
+        "operationId": "create_note_notes__post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/NoteCreate" }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Created" } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Priority": {
+        "type": "string",
+        "enum": ["low", "high"],
+        "title": "Priority"
+      },
+      "NoteCreate": {
+        "type": "object",
+        "title": "NoteCreate",
+        "required": ["text"],
+        "properties": {
+          "text": { "type": "string", "title": "Text" },
+          "subtitle": { "type": "string", "nullable": true, "title": "Subtitle" },
+          "priority": {
+            "allOf": [{ "$ref": "#/components/schemas/Priority" }],
+            "default": "low"
+          }
+        }
+      }
+    }
+  }
+}

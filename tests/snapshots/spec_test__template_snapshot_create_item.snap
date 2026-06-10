@@ -1,0 +1,135 @@
+---
+source: tests/spec_test.rs
+expression: "serde_json::to_value(&template).unwrap()"
+---
+{
+  "endpoint_id": "create_item_items__post",
+  "method": "POST",
+  "path": "/items/",
+  "summary": "Create item",
+  "path_params": [],
+  "query_params": [],
+  "header_params": [],
+  "body": {
+    "sku": "<string>",
+    "price": "<number>",
+    "kind": "physical",
+    "variants": [
+      {
+        "name": "<string>",
+        "stock": "<integer>",
+        "size": null
+      }
+    ],
+    "metadata": {},
+    "parent": null
+  },
+  "body_schema": {
+    "kind": "object",
+    "fields": [
+      {
+        "name": "sku",
+        "schema": {
+          "kind": "string"
+        },
+        "required": true,
+        "nullable": false
+      },
+      {
+        "name": "price",
+        "schema": {
+          "kind": "number",
+          "minimum": 0.0
+        },
+        "required": true,
+        "nullable": false
+      },
+      {
+        "name": "kind",
+        "schema": {
+          "kind": "const",
+          "value": "physical"
+        },
+        "required": true,
+        "nullable": false
+      },
+      {
+        "name": "variants",
+        "schema": {
+          "kind": "array",
+          "item": {
+            "kind": "object",
+            "fields": [
+              {
+                "name": "name",
+                "schema": {
+                  "kind": "string"
+                },
+                "required": true,
+                "nullable": false
+              },
+              {
+                "name": "stock",
+                "schema": {
+                  "kind": "integer",
+                  "minimum": 0
+                },
+                "required": true,
+                "nullable": false
+              },
+              {
+                "name": "size",
+                "schema": {
+                  "kind": "string",
+                  "enum_values": [
+                    "S",
+                    "M",
+                    "L"
+                  ]
+                },
+                "required": false,
+                "nullable": true,
+                "default": null
+              }
+            ]
+          }
+        },
+        "required": true,
+        "nullable": false
+      },
+      {
+        "name": "metadata",
+        "schema": {
+          "kind": "object",
+          "fields": [],
+          "additional": {
+            "kind": "string"
+          }
+        },
+        "required": false,
+        "nullable": false,
+        "default": {}
+      },
+      {
+        "name": "parent",
+        "schema": {
+          "kind": "any"
+        },
+        "required": false,
+        "nullable": true,
+        "default": null
+      }
+    ]
+  },
+  "body_content_type": "application/json",
+  "optional_paths": [
+    "variants[].size",
+    "metadata",
+    "parent"
+  ],
+  "nullable_paths": [
+    "variants[].size",
+    "parent"
+  ],
+  "auth_required": false
+}
