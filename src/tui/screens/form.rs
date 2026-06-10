@@ -12,7 +12,7 @@ use ratatui::widgets::Paragraph;
 use serde_json::Value;
 
 use super::{Action, Screen, response::ResponseView};
-use crate::auth::{AuthManager, DenyInteractor};
+use crate::auth::AuthManager;
 use crate::config;
 use crate::http::{RequestArgs, RequestExecutor};
 use crate::model::Endpoint;
@@ -54,6 +54,7 @@ impl RequestForm {
         let seq = ctx.request_seq;
         let services = ctx.services.clone();
         let tx = ctx.tx.clone();
+        let interactor = ctx.interactor();
         let project_name = self.bundle.project.clone();
         let endpoint = self.endpoint.clone();
         let args = RequestArgs {
@@ -66,13 +67,8 @@ impl RequestForm {
 
         tokio::spawn(async move {
             let result = async {
-                let project = config::project(&services.config, &project_name)
-                    .map_err(|e| e.to_string())?;
-                let interactor = Arc::new(DenyInteractor {
-                    instruction: format!(
-                        "credentials need a prompt — run `hit login {project_name}` in a terminal first"
-                    ),
-                });
+                let project =
+                    config::project(&services.config, &project_name).map_err(|e| e.to_string())?;
                 let auth = AuthManager::for_project(
                     &project_name,
                     project,
@@ -88,7 +84,10 @@ impl RequestForm {
                     project,
                     auth: auth.as_ref(),
                 };
-                executor.execute(&endpoint, &args).await.map_err(|e| e.to_string())
+                executor
+                    .execute(&endpoint, &args)
+                    .await
+                    .map_err(|e| e.to_string())
             }
             .await;
             let _ = tx.send(AppMsg::Response {

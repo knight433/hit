@@ -38,6 +38,15 @@ pub enum AppMsg {
         request_seq: u64,
         result: Result<ApiResponse, String>,
     },
+    /// An auth task needs a credential from the user; the answer goes back
+    /// through `respond` (Err = user cancelled).
+    Prompt {
+        label: String,
+        secret: bool,
+        respond: std::sync::mpsc::Sender<Result<String, crate::error::AuthError>>,
+    },
+    /// Transient status-line text from a background task (e.g. OAuth URL).
+    Notify(String),
     Error(String),
 }
 
@@ -54,10 +63,18 @@ pub struct AppCtx {
 
 impl AppCtx {
     pub fn show_error(&mut self, message: impl Into<String>) {
-        self.modal = Some(Modal {
+        self.modal = Some(Modal::Info {
             title: "error".into(),
             body: message.into(),
         });
+    }
+
+    /// Interactor that resolves prompts through TUI modals — used by every
+    /// auth flow started from inside the TUI.
+    pub fn interactor(&self) -> Arc<TuiInteractor> {
+        Arc::new(TuiInteractor {
+            tx: self.tx.clone(),
+        })
     }
 
     pub fn set_status(&mut self, message: impl Into<String>) {
@@ -98,9 +115,56 @@ impl AppCtx {
     }
 }
 
-pub struct Modal {
-    pub title: String,
-    pub body: String,
+pub enum Modal {
+    Info {
+        title: String,
+        body: String,
+    },
+    /// Credential input: typed text accumulates in `input` (rendered masked
+    /// when `secret`); Enter sends it back to the waiting auth task.
+    Prompt {
+        label: String,
+        secret: bool,
+        input: String,
+        respond: std::sync::mpsc::Sender<Result<String, crate::error::AuthError>>,
+    },
+}
+
+/// Bridges background auth tasks to the UI thread: prompts surface as
+/// modals, and the task blocks until the user answers.
+pub struct TuiInteractor {
+    tx: mpsc::UnboundedSender<AppMsg>,
+}
+
+impl crate::auth::Interactor for TuiInteractor {
+    fn prompt_line(&self, label: &str) -> Result<String, crate::error::AuthError> {
+        self.prompt(label, false)
+    }
+
+    fn prompt_secret(&self, label: &str) -> Result<String, crate::error::AuthError> {
+        self.prompt(label, true)
+    }
+
+    fn notify(&self, message: &str) {
+        let _ = self.tx.send(AppMsg::Notify(message.to_string()));
+    }
+}
+
+impl TuiInteractor {
+    fn prompt(&self, label: &str, secret: bool) -> Result<String, crate::error::AuthError> {
+        let (respond, answer) = std::sync::mpsc::channel();
+        self.tx
+            .send(AppMsg::Prompt {
+                label: label.to_string(),
+                secret,
+                respond,
+            })
+            .map_err(|_| crate::error::AuthError::Credential("TUI shut down".into()))?;
+        // Called from a spawned auth task; park this worker thread without
+        // starving the runtime.
+        tokio::task::block_in_place(|| answer.recv())
+            .map_err(|_| crate::error::AuthError::Credential("prompt abandoned".into()))?
+    }
 }
 
 /// TUI entry point; returns the process exit code.
@@ -257,9 +321,8 @@ fn run_external_editor(terminal: &mut ratatui::DefaultTerminal, seed: &str) -> O
 
 fn handle_key(key: KeyEvent, stack: &mut Vec<Box<dyn Screen>>, ctx: &mut AppCtx) -> Action {
     ctx.status = None;
-    // Modal swallows the next key.
     if ctx.modal.is_some() {
-        ctx.modal = None;
+        handle_modal_key(key, ctx);
         return Action::None;
     }
     let top = stack.last_mut().expect("stack is never empty");
@@ -274,18 +337,88 @@ fn handle_key(key: KeyEvent, stack: &mut Vec<Box<dyn Screen>>, ctx: &mut AppCtx)
     action
 }
 
+/// Keys while a modal is up: info modals dismiss on any key; prompt modals
+/// behave like a one-line editor and answer the waiting auth task.
+fn handle_modal_key(key: KeyEvent, ctx: &mut AppCtx) {
+    match ctx.modal.take() {
+        Some(Modal::Info { .. }) | None => {}
+        Some(Modal::Prompt {
+            label,
+            secret,
+            mut input,
+            respond,
+        }) => match key.code {
+            KeyCode::Enter => {
+                let _ = respond.send(Ok(input));
+            }
+            KeyCode::Esc => {
+                let _ = respond.send(Err(crate::error::AuthError::Credential(
+                    "login cancelled".into(),
+                )));
+            }
+            KeyCode::Backspace => {
+                input.pop();
+                ctx.modal = Some(Modal::Prompt {
+                    label,
+                    secret,
+                    input,
+                    respond,
+                });
+            }
+            KeyCode::Char(c) => {
+                input.push(c);
+                ctx.modal = Some(Modal::Prompt {
+                    label,
+                    secret,
+                    input,
+                    respond,
+                });
+            }
+            _ => {
+                ctx.modal = Some(Modal::Prompt {
+                    label,
+                    secret,
+                    input,
+                    respond,
+                });
+            }
+        },
+    }
+}
+
 fn handle_msg(msg: AppMsg, stack: &mut [Box<dyn Screen>], ctx: &mut AppCtx) -> Action {
-    if let AppMsg::SpecLoaded { project, result } = &msg
-        && let Ok(bundle) = result
-    {
-        ctx.specs.insert(project.clone(), bundle.clone());
+    match msg {
+        AppMsg::Prompt {
+            label,
+            secret,
+            respond,
+        } => {
+            ctx.modal = Some(Modal::Prompt {
+                label,
+                secret,
+                input: String::new(),
+                respond,
+            });
+            Action::None
+        }
+        AppMsg::Notify(message) => {
+            ctx.set_status(message);
+            Action::None
+        }
+        AppMsg::Error(message) => {
+            ctx.show_error(message);
+            Action::None
+        }
+        msg => {
+            if let AppMsg::SpecLoaded { project, result } = &msg
+                && let Ok(bundle) = result
+            {
+                ctx.specs.insert(project.clone(), bundle.clone());
+            }
+            let top = stack.last_mut().expect("stack is never empty");
+            top.handle_msg(&msg, ctx)
+        }
     }
-    if let AppMsg::Error(message) = &msg {
-        ctx.show_error(message.clone());
-        return Action::None;
-    }
-    let top = stack.last_mut().expect("stack is never empty");
-    top.handle_msg(&msg, ctx)
 }
 
 fn draw(frame: &mut Frame, stack: &mut [Box<dyn Screen>], ctx: &AppCtx) {

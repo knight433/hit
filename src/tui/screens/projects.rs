@@ -9,7 +9,54 @@ use ratatui::widgets::{List, ListItem, ListState, Paragraph};
 
 use super::{Action, Screen, move_selection, tags::TagList};
 use crate::AppServices;
-use crate::tui::AppCtx;
+use crate::auth::AuthManager;
+use crate::tui::{AppCtx, AppMsg};
+
+/// Authenticate now (prompting through TUI modals as needed) and report
+/// the result on the status line.
+fn login(project_name: String, ctx: &mut AppCtx) {
+    let services = ctx.services.clone();
+    let tx = ctx.tx.clone();
+    let interactor = ctx.interactor();
+    ctx.set_status(format!("logging in to '{project_name}'…"));
+    tokio::spawn(async move {
+        let result = async {
+            let project = crate::config::project(&services.config, &project_name)
+                .map_err(|e| e.to_string())?;
+            let auth = AuthManager::for_project(
+                &project_name,
+                project,
+                services.settings(),
+                &services.paths,
+                services.client.clone(),
+                interactor,
+                false,
+            )
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| {
+                format!(
+                    "project '{project_name}' has no auth configured — add a \
+                     [projects.{project_name}.auth] block to projects.toml"
+                )
+            })?;
+            auth.invalidate().await;
+            auth.bearer().await.map_err(|e| e.to_string())?;
+            Ok::<_, String>(auth.cached_expiry())
+        }
+        .await;
+        let msg = match result {
+            Ok(Some(exp)) => {
+                let remaining = exp.saturating_sub(crate::auth::token_store::now_unix());
+                AppMsg::Notify(format!(
+                    "logged in to '{project_name}' (token expires in {remaining}s)"
+                ))
+            }
+            Ok(None) => AppMsg::Notify(format!("logged in to '{project_name}'")),
+            Err(message) => AppMsg::Error(message),
+        };
+        let _ = tx.send(msg);
+    });
+}
 
 pub struct ProjectList {
     names: Vec<String>,
@@ -34,6 +81,7 @@ impl Screen for ProjectList {
         vec![
             ("↑↓", "select"),
             ("enter", "open"),
+            ("l", "login"),
             ("r", "reload spec"),
             ("q", "quit"),
         ]
@@ -62,6 +110,12 @@ impl Screen for ProjectList {
                 if let Some(name) = self.names.get(self.selected) {
                     ctx.specs.remove(name);
                     ctx.set_status(format!("spec cache for '{name}' dropped"));
+                }
+                Action::None
+            }
+            KeyCode::Char('l') => {
+                if let Some(name) = self.names.get(self.selected) {
+                    login(name.clone(), ctx);
                 }
                 Action::None
             }

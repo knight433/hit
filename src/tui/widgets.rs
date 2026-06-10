@@ -38,16 +38,53 @@ pub fn draw_footer(frame: &mut Frame, area: Rect, hints: &[(&str, &str)], status
 }
 
 pub fn draw_modal(frame: &mut Frame, modal: &Modal) {
-    let area = centered(frame.area(), 60, 30);
-    frame.render_widget(Clear, area);
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" {} ", modal.title))
-        .border_style(Style::new().fg(Color::Red));
-    let paragraph = Paragraph::new(modal.body.as_str())
-        .wrap(Wrap { trim: false })
-        .block(block);
-    frame.render_widget(paragraph, area);
+    match modal {
+        Modal::Info { title, body } => {
+            let area = centered(frame.area(), 60, 30);
+            frame.render_widget(Clear, area);
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .title(format!(" {title} "))
+                .border_style(Style::new().fg(Color::Red));
+            let paragraph = Paragraph::new(body.as_str())
+                .wrap(Wrap { trim: false })
+                .block(block);
+            frame.render_widget(paragraph, area);
+        }
+        Modal::Prompt {
+            label,
+            secret,
+            input,
+            ..
+        } => {
+            let area = centered(frame.area(), 60, 22);
+            frame.render_widget(Clear, area);
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .title(" login ")
+                .border_style(Style::new().fg(Color::Cyan));
+            let shown = if *secret {
+                "•".repeat(input.chars().count())
+            } else {
+                input.clone()
+            };
+            let lines = vec![
+                Line::raw(""),
+                Line::from(Span::styled(
+                    format!(" {label}:"),
+                    Style::new().add_modifier(Modifier::BOLD),
+                )),
+                Line::from(vec![
+                    Span::raw(" > "),
+                    Span::styled(shown, Style::new().fg(Color::Yellow)),
+                    Span::styled("▏", Style::new().fg(Color::Yellow)),
+                ]),
+                Line::raw(""),
+                Line::from(Span::styled(" enter: submit   esc: cancel", dim())),
+            ];
+            frame.render_widget(Paragraph::new(lines).block(block), area);
+        }
+    }
 }
 
 /// A centered rect occupying the given percentages of the parent.

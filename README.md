@@ -39,6 +39,7 @@ marked `*`, path/query/header params get their own sections, enums cycle with
 
 | Key | Action |
 |---|---|
+| `l` | log in to the selected project (projects screen) — credentials are asked in a modal |
 | `enter` | edit field / toggle / expand |
 | **`Shift+X`** | cycle a field: value → `∅ null` → `— excluded` (as allowed by required/nullable) |
 | `x` | re-include an excluded/nulled field |
@@ -128,7 +129,12 @@ redirect_port = 0            # 0 = ephemeral; set fixed if your IdP requires it
 ```
 
 Auth is attached as `Authorization: Bearer …`; a 401 invalidates the cached
-token and retries once (re-login or refresh-token grant). Tokens are stored
+token and retries once (re-login or refresh-token grant). Logging in works
+everywhere it can: `hit login <project>` prompts on the terminal, the TUI
+prompts in a modal (press `l` on the projects screen, or just send a request
+— you'll be asked when credentials are needed), and OAuth opens the browser
+from either. Only MCP mode never prompts; it returns the `hit login …`
+command to run instead. Tokens are stored
 in the OS keyring when built with `--features keyring` (with automatic
 fallback to `0600` files under `~/.local/share/hitpoint/tokens/`), or in
 files otherwise. `HITPOINT_NO_BROWSER=1` prints the OAuth URL instead of
